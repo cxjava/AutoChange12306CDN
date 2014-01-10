@@ -11,4 +11,7 @@
 * 打开谷歌浏览器扩展安装界面 chrome://extensions/，把MiaoPiao.user.js 拖入到里面，不知道怎么操作的可以参考[安装说明 - 鱼の后花园](http://www.fishlee.net/soft/44/how_to_install.html)
 * 打开本软件，设置谷歌浏览器的代理地址为本软件监听地址
 
-# 最后希望大家都能早日买到火车票票回家团圆
+# 打包好的下载地址
+链接：[http://pan.baidu.com/s/1eQBVbiU](http://pan.baidu.com/s/1eQBVbiU) 密码：lw7i
+
+#### 最后希望大家都能早日买到火车票票回家团圆
