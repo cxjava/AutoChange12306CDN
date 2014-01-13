@@ -51,10 +51,8 @@ func main() {
 
 	for _, matchUrl := range Config.UrlMatches {
 		proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(matchUrl))).DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-			defer func() {
-				add <- 0
-			}()
 			i := <-index
+			add <- 0
 
 			Info("使用第", i, "个", Config.CDN[i])
 
