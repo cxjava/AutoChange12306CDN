@@ -5,7 +5,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"regexp"
 	"strings"
@@ -56,7 +58,7 @@ func main() {
 			add <- 0
 			Info("使用第", i, "个", Config.CDN[i])
 			r.Header.Set("Connection", "close")
-			resp, err := DoForWardRequest(Config.CDN[i], r)
+			resp, err := DoForWardRequest2(Config.CDN[i], r)
 			if err != nil {
 				Error(Config.CDN[i], " OnRequest error:", err)
 				return r, nil
@@ -83,8 +85,40 @@ func ChangeCDN() {
 		}
 	}
 }
+func newForwardClientConn(forwardAddress, scheme string) (*httputil.ClientConn, error) {
+	// var clientConn *httputil.ClientConn
+	if "http" == scheme {
+		conn, err := net.Dial("tcp", forwardAddress+":80")
+		if err != nil {
+			fmt.Println("newForwardClientConn net.Dial error:", err)
+			return nil, err
+		}
+		return httputil.NewClientConn(conn, nil), nil
+	} else {
+		conn, err := tls.Dial("tcp", forwardAddress+":443", &tls.Config{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			fmt.Println("newForwardClientConn tls.Dial error:", err)
+			return nil, err
+		}
+		return httputil.NewClientConn(conn, nil), nil
+	}
+	//resp, err := clientConn.Do(req)
+	return nil, nil
+}
 
 func DoForWardRequest(forwardAddress string, req *http.Request) (*http.Response, error) {
+	clientConn, err := newForwardClientConn(forwardAddress, "https")
+	if err != nil {
+		fmt.Println("DoForWardRequest newForwardClientConn error:", err)
+		return nil, err
+	}
+	// defer clientConn.Close()
+	return clientConn.Do(req)
+}
+
+func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response, error) {
 	if !strings.Contains(forwardAddress, ":") {
 		forwardAddress = forwardAddress + ":443"
 	}
