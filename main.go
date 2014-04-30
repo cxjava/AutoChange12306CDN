@@ -54,20 +54,12 @@ func main() {
 		proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(matchUrl))).DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 			i := <-index
 			add <- 0
-			Debug(r.URL.Host, ",", r.URL.Path)
 			Info("使用第", i, "个", Config.CDN[i])
-			for k, v := range r.Header {
-				Debug(k, "=", v)
-			}
 			r.Header.Set("Connection", "close")
 			resp, err := DoForWardRequest(Config.CDN[i], r)
 			if err != nil {
 				Error(Config.CDN[i], " OnRequest error:", err)
 				return r, nil
-			}
-			Debug("ddddddddd")
-			for k, v := range resp.Header {
-				Debug(k, "=", v)
 			}
 			return r, resp
 		})
