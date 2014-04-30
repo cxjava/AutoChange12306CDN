@@ -2,8 +2,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
+	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -53,13 +54,21 @@ func main() {
 		proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(matchUrl))).DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 			i := <-index
 			add <- 0
-
+			Info(r.URL.Host, ",", r.URL.Path)
 			Info("使用第", i, "个", Config.CDN[i])
+
+			for k, v := range r.Header {
+				Info(k, "=", v)
+			}
 
 			resp, err := DoForWardRequest(Config.CDN[i], r)
 			if err != nil {
 				Error(Config.CDN[i], "OnRequest error:", err)
 				return r, nil
+			}
+			Info("ddddddddd")
+			for k, v := range resp.Header {
+				Info(k, "=", v)
 			}
 			return r, resp
 		})
@@ -84,25 +93,30 @@ func ChangeCDN() {
 	}
 }
 
-//转发
 func DoForWardRequest(forwardAddress string, req *http.Request) (*http.Response, error) {
 	if !strings.Contains(forwardAddress, ":") {
-		forwardAddress = forwardAddress + ":80"
+		forwardAddress = forwardAddress + ":443"
 	}
 
-	conn, err := net.DialTimeout("tcp", forwardAddress, timeout)
+	conn, err := tls.Dial("tcp", forwardAddress, &tls.Config{
+		InsecureSkipVerify: true,
+	})
+	// conn, err := net.Dial("tcp", forwardAddress)
+
 	if err != nil {
-		Error("DoForWardRequest Dial error:", err)
+		fmt.Println("doForWardRequest DialTimeout error:", err)
 		return nil, err
 	}
+	// defer conn.Close()
 
+	//buf_forward_conn *bufio.Reader
 	buf_forward_conn := bufio.NewReader(conn)
-
-	var errWrite error
-	errWrite = req.Write(conn)
+	// req.Close = true
+	req.Header.Set("Connection", "close")
+	errWrite := req.Write(conn)
 	if errWrite != nil {
-		Error("DoForWardRequest Write error:", errWrite)
-		return nil, errWrite
+		fmt.Println("doForWardRequest Write error:", errWrite)
+		return nil, err
 	}
 
 	return http.ReadResponse(buf_forward_conn, req)

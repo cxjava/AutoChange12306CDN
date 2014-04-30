@@ -129,7 +129,70 @@ withjQuery(function($, window) {
 		document.cookie = cookieString + "; path=/";
 
 	}
+	var crack = function() {
+		setTimeout(function() {
+			window.autoSearchTime = 900;
+			$("#randCode2").unbind('keyup');
 
+			function bO() {
+				if ($("#sf2").is(":checked")) {
+					return "0X00"
+				} else {
+					return "ADULT"
+				}
+			};
+			$("#randCode2").on("click",
+				function(bR) {
+					$.ajax({
+						url: ctx + "passcodeNew/checkRandCodeAnsyn",
+						type: "post",
+						data: {
+							randCode: $("#randCode2").val(),
+							rand: "sjrand"
+						},
+						async: false,
+						success: function(bS) {
+							bb = $("#randCode2").val();
+							$("#back_edit").trigger("click");
+							$.ajax({
+								url: ctx + "confirmPassenger/confirmSingle",
+								type: "post",
+								data: {
+									passengerTicketStr: getpassengerTicketsForAutoSubmit(),
+									oldPassengerStr: getOldPassengersForAutoSubmit(),
+									tour_flag: "dc",
+									randCode: $("#randCode").val(),
+									purpose_codes: bO(),
+									key_check_isChange: md5Str,
+									train_location: location_code
+								},
+								dataType: "json",
+								async: true,
+								success: function(bR) {
+									otsRedirect("post", ctx + "payOrder/init?random=" + new Date().getTime(), {})
+								},
+								error: function(bR, bT, bS) {
+									return
+								}
+							})
+							$("#randCode2").removeClass("inptxt w100 error").addClass("inptxt w100");
+							$("#i-ok2").css("display", "block");
+							$("#c_error2").html("");
+							$("#c_error2").removeClass("error");
+							return
+						}
+					})
+
+					bb = $("#randCode2").val()
+				});
+			setInterval(function() {
+				if ($('#autosubmitcheckticketinfo').css('display') != 'none') {
+					$("#randCode2").val('xxoo');
+					$("#randCode2").trigger('click');
+				}
+			}, 400);
+		}, 6000);
+	}
 	//--- 获取cookie
 	var getCookie = function(sName) {
 		var aCookie = document.cookie.split("; ");
@@ -163,7 +226,7 @@ withjQuery(function($, window) {
 				"北京": ["北京北", "北京东", "北京南", "北京", "北京西"],
 				"长沙": ["长沙", "长沙南"],
 				"衡阳": ["衡阳", "衡阳东"],
-				"深圳": ["深圳", "深圳北","深圳西"],
+				"深圳": ["深圳", "深圳北", "深圳西"],
 				"岳阳": ["岳阳", "岳阳东"],
 				"重庆": ["重庆", "重庆北"],
 				"武汉": ["武汉", "武昌", "汉口"],
@@ -203,6 +266,7 @@ withjQuery(function($, window) {
 
 			setTimeout(function() {
 				window.autoSearchTime = 2000;
+				crack();
 			}, 2000);
 
 			setInterval(function() {
@@ -215,26 +279,8 @@ withjQuery(function($, window) {
 				}
 			}, 6000);
 
-			//        setInterval(function () {
-			//            if ($("#autosubmitcheckticketinfo").length > 0 && $("#autosubmitcheckticketinfo").css("display") != "none") {
-
-			//                if ($("#music").length == 0) {
-			//                    $("#autosubmitcheckticketinfo").append("<iframe id='music' src='http://bz.5sing.com/1471807.html' height='0' width='0'>");
-			//                }
-
-			//                if ($("#randCode2").length > 0) {
-			//                    if (!$("#randCode2").val()) {
-			//                        $("#randCode2")[0].focus();
-			//                    }
-			//                }
-
-			//                if ($("#i-ok2").length > 0 && $("#i-ok2").css("display") == "block") {
-			//                    document.getElementById("qr_submit").dispatchEvent(clickevent);
-			//                }
-			//            }
-
-			//        }, 500);
 		}
+
 
 	route("init", query);
 
