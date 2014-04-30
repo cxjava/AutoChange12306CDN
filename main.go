@@ -54,21 +54,20 @@ func main() {
 		proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(matchUrl))).DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 			i := <-index
 			add <- 0
-			Info(r.URL.Host, ",", r.URL.Path)
+			Debug(r.URL.Host, ",", r.URL.Path)
 			Info("使用第", i, "个", Config.CDN[i])
-
 			for k, v := range r.Header {
-				Info(k, "=", v)
+				Debug(k, "=", v)
 			}
-
+			r.Header.Set("Connection", "close")
 			resp, err := DoForWardRequest(Config.CDN[i], r)
 			if err != nil {
-				Error(Config.CDN[i], "OnRequest error:", err)
+				Error(Config.CDN[i], " OnRequest error:", err)
 				return r, nil
 			}
-			Info("ddddddddd")
+			Debug("ddddddddd")
 			for k, v := range resp.Header {
-				Info(k, "=", v)
+				Debug(k, "=", v)
 			}
 			return r, resp
 		})
@@ -108,11 +107,8 @@ func DoForWardRequest(forwardAddress string, req *http.Request) (*http.Response,
 		return nil, err
 	}
 	// defer conn.Close()
-
-	//buf_forward_conn *bufio.Reader
 	buf_forward_conn := bufio.NewReader(conn)
-	// req.Close = true
-	req.Header.Set("Connection", "close")
+
 	errWrite := req.Write(conn)
 	if errWrite != nil {
 		fmt.Println("doForWardRequest Write error:", errWrite)
