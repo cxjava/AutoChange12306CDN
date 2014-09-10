@@ -1,0 +1,16 @@
+<!-- https://github.com/cihub/seelog/wiki/Log-levels -->
+<!--"trace","debug","info","warn","error","critical",-->
+<seelog type="asynctimer" asyncinterval="5000000" minlevel="debug" maxlevel="critical">
+    <exceptions>
+        <exception filepattern="perfcriticalfile.go" minlevel="critical" />
+    </exceptions>
+    <outputs formatid="format2">
+        <console/>
+        <rollingfile formatid="format1" type="size" filename="./log/roll.log" maxsize="524288" maxrolls="5" />
+    </outputs>
+    <formats>
+        <format id="main" format="%Date(2006 Jan 02/3:04:05.000000000 PM MST) [%Level] %Msg%n"/>
+        <format id="format1" format="%Date %Time %RelFile %Func %Line [%LEV] %Msg%n" />
+        <format id="format2" format="%Date %Time [%LEV] %Msg%n" />
+    </formats>
+</seelog>
