@@ -4,7 +4,7 @@
     <exceptions>
         <exception filepattern="perfcriticalfile.go" minlevel="critical" />
     </exceptions>
-    <outputs formatid="format2">
+    <outputs formatid="format1">
         <console/>
         <rollingfile formatid="format1" type="size" filename="./log/roll.log" maxsize="524288" maxrolls="5" />
     </outputs>

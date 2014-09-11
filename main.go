@@ -58,6 +58,7 @@ func main() {
 	proxy.Verbose = Config.Verbose
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.ReqHostIs("kyfw.12306.cn:443")).HandleConnect(goproxy.AlwaysMitm)
+	// proxy.OnRequest(goproxy.ReqHostIs("kyfw.12306.cn")).HandleConnect(goproxy.AlwaysMitm)
 
 	// proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*kyfw\\.12306\\.cn$"))).HandleConnect(goproxy.AlwaysMitm)
 	// proxy.OnRequest(goproxy.ReqHostIs("kyfw.12306.cn:443")).HandleConnect(goproxy.AlwaysMitm)
@@ -67,11 +68,15 @@ func main() {
 			i := <-index
 			add <- 0
 			log.Info("使用第", i, "个", Config.CDN[i])
+			// if r.URL.Scheme == "https" {
+			// r.URL.Scheme = "http"
+			// }
 			// r.Header.Set("Connection", "close")
 			r.Header.Add("If-Modified-Since", time.Now().Local().Format(time.RFC1123Z))
 			r.Header.Add("If-None-Match", strconv.FormatInt(time.Now().UnixNano(), 10))
 			r.Header.Add("Cache-Control", "no-cache")
-			resp, err := DoForWardRequest2(Config.CDN[i], r)
+			r.Header.Del("Content-Length")
+			resp, err := DoForWardRequest(Config.CDN[i], r)
 			if err != nil {
 				log.Error(Config.CDN[i], " OnRequest error:", err)
 				return r, nil
