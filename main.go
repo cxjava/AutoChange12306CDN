@@ -2,11 +2,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
 	"crypto/tls"
+	"io"
+	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"os"
 	"regexp"
 	"runtime/debug"
 	"strconv"
@@ -19,19 +23,24 @@ import (
 )
 
 type config struct {
-	ListenAddr string   `toml:"listen_addr"`
-	UrlMatches []string `toml:"url_matches"`
-	Timeout    int      `toml:"time_out"`
-	LogLevel   int      `toml:"log_level"`
-	Verbose    bool     `toml:"proxy_verbose"`
-	CDN        []string `toml:"cdn"`
+	ListenAddr   string   `toml:"listen_addr"`
+	UrlMatches   []string `toml:"url_matches"`
+	FromStations []string `toml:"from_station"`
+	ToStations   []string `toml:"to_station"`
+	Verbose      bool     `toml:"proxy_verbose"`
+	CDN          []string `toml:"cdn"`
 }
 
 var (
-	timeout = 5 * time.Second //超时时间
-	index   = make(chan int)  //获取CDN下标的队列
-	add     = make(chan int)  //通知CDN下标加1的队列
-	Config  config            //配置文件
+	timeout        = 5 * time.Second //超时时间
+	fromStationStr = ""              //起点站
+	fromStation    []string          //起点站数组
+	toStationStr   = ""              //终点站
+	toStation      []string          //终点站数组
+	index          = make(chan int)  //获取CDN下标的队列
+	add            = make(chan int)  //通知CDN下标加1的队列
+	Config         config            //配置文件
+	r              = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 func main() {
@@ -42,36 +51,52 @@ func main() {
 			log.Critical(string(debug.Stack()))
 		}
 	}()
-	if err := ReadConfig(); err != nil {
-		log.Error(err)
-		os.Exit(0)
-		return
-	}
-	if len(Config.CDN) < 1 {
-		log.Error("淘气了,CDN也不配置～～")
-		os.Exit(0)
-		return
-	}
+	readConfig()
 
 	proxy := goproxy.NewProxyHttpServer()
 
 	proxy.Verbose = Config.Verbose
-	// proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.ReqHostIs("kyfw.12306.cn:443")).HandleConnect(goproxy.AlwaysMitm)
 
+	addUrlMatches(proxy)
+
+	go ChangeCDN()
+
+	log.Info("监听端口:", Config.ListenAddr)
+	http.ListenAndServe(Config.ListenAddr, proxy)
+}
+
+func addUrlMatches(proxy *goproxy.ProxyHttpServer) {
 	for _, matchUrl := range Config.UrlMatches {
-		proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(matchUrl))).DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(matchUrl))).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 			i := <-index
 			add <- 0
 			log.Info("使用第", i, "个", Config.CDN[i])
-			r.Header.Set("If-Modified-Since", time.Now().Local().Format(time.RFC1123Z))
-			r.Header.Set("If-None-Match", strconv.FormatInt(time.Now().UnixNano(), 10))
-			r.Header.Set("Cache-Control", "no-cache")
-			r.Header.Del("Content-Length")
-			resp, err := DoForWardRequest2(Config.CDN[i], r)
+			req.Header.Set("If-Modified-Since", time.Now().Local().Format(time.RFC1123Z))
+			req.Header.Set("If-None-Match", strconv.FormatInt(time.Now().UnixNano(), 10))
+			req.Header.Set("Cache-Control", "no-cache")
+			req.Header.Del("Content-Length")
+
+			from := req.FormValue("leftTicketDTO.from_station")
+			to := req.FormValue("leftTicketDTO.to_station")
+
+			log.Debug("from:", from, " to:", to)
+			log.Debug(req.URL.RawQuery)
+			//随机读取提供的查询地址，不在是单一的武汉，可以随机：武汉，武昌，汉口。免得缓存
+			if len(fromStation) > 0 && strings.Contains(fromStationStr, from) {
+				req.URL.RawQuery = strings.Replace(req.URL.RawQuery, from, fromStation[r.Intn(len(fromStation))], -1)
+			}
+
+			if len(toStation) > 0 && strings.Contains(toStationStr, to) {
+				req.URL.RawQuery = strings.Replace(req.URL.RawQuery, to, toStation[r.Intn(len(toStation))], -1)
+			}
+
+			log.Debug(req.URL.RawQuery)
+
+			resp, err := DoForWardRequest2(Config.CDN[i], req)
 			if err != nil {
 				log.Error(Config.CDN[i], " OnRequest error:", err)
-				return r, nil
+				return req, nil
 			}
 			// go func(resp *http.Response) {
 			// 	time.Sleep(5 * time.Second)
@@ -79,27 +104,32 @@ func main() {
 			// 	resp.Body.Close()
 			// }(resp)
 
-			log.Info(Config.CDN[i], "success!")
-			return r, resp
+			d, err := httputil.DumpResponse(resp, false)
+			if err != nil {
+				log.Error(Config.CDN[i], " OnRequest error:", err)
+				return req, nil
+			}
+
+			save := resp.Body
+			savecl := resp.ContentLength
+
+			save, resp.Body, err = drainBody(resp.Body)
+			if err != nil {
+				log.Error(Config.CDN[i], " drainBody error:", err)
+				return req, nil
+			}
+			content := string(ParseResponseBody(resp))
+			if !strings.Contains(content, `"httpstatus":200,"data":[{"queryLeftNewDTO":{"t`) {
+				log.Error("Content is:", content)
+				log.Error("Header is:", string(d))
+			}
+
+			resp.Body = save
+			resp.ContentLength = savecl
+
+			log.Info(Config.CDN[i], " success!")
+			return req, resp
 		})
-	}
-
-	go ChangeCDN()
-	log.Info("监听端口:", Config.ListenAddr)
-	http.ListenAndServe(Config.ListenAddr, proxy)
-}
-
-//切换CDN下标
-func ChangeCDN() {
-	i := 0
-	index <- i
-	for {
-		select {
-		case <-add:
-			i += 1
-			i = i % len(Config.CDN)
-			index <- i
-		}
 	}
 }
 
@@ -159,14 +189,88 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 }
 
 //读取配置文件
-func ReadConfig() error {
+func readConfig() {
 	if _, err := toml.DecodeFile("config.ini", &Config); err != nil {
 		log.Error(err)
-		return err
+		return
 	}
 
-	if Config.Timeout > 0 {
-		timeout = time.Duration(Config.Timeout) * time.Second
+	if len(Config.CDN) < 1 {
+		log.Error("淘气了,CDN也不配置～～")
+		return
 	}
-	return nil
+	//解析地址
+	parseStationNames()
+	//解析起点站
+	if len(Config.FromStations) > 0 {
+		fromStation = make([]string, len(Config.FromStations))
+		for k, v := range Config.FromStations {
+			fromStationStr = fromStationStr + stationMap[v]
+			fromStation[k] = stationMap[v]
+		}
+	}
+	//终点站
+	if len(Config.ToStations) > 0 {
+		toStation = make([]string, len(Config.ToStations))
+		for k, v := range Config.ToStations {
+			toStationStr = toStationStr + stationMap[v]
+			toStation[k] = stationMap[v]
+		}
+	}
+
+	log.Info("起点站:", fromStationStr, ":", fromStation)
+	log.Info("终点站:", toStationStr, ":", toStation)
+}
+
+func drainBody(b io.ReadCloser) (r1, r2 io.ReadCloser, err error) {
+	var buf bytes.Buffer
+	if _, err = buf.ReadFrom(b); err != nil {
+		return nil, nil, err
+	}
+	if err = b.Close(); err != nil {
+		return nil, nil, err
+	}
+	return ioutil.NopCloser(&buf), ioutil.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+//切换CDN下标
+func ChangeCDN() {
+	i := 0
+	index <- i
+	for {
+		select {
+		case <-add:
+			i += 1
+			i = i % len(Config.CDN)
+			index <- i
+		}
+	}
+}
+
+//读取响应
+func ParseResponseBody(resp *http.Response) string {
+	var body []byte
+	switch resp.Header.Get("Content-Encoding") {
+	case "gzip":
+		reader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			log.Error(err)
+			return ""
+		}
+		defer reader.Close()
+		bodyByte, err := ioutil.ReadAll(reader)
+		if err != nil {
+			log.Error(err)
+			return ""
+		}
+		body = bodyByte
+	default:
+		bodyByte, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error(err)
+			return ""
+		}
+		body = bodyByte
+	}
+	return string(body)
 }
