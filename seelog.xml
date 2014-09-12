@@ -10,7 +10,7 @@
     </outputs>
     <formats>
         <format id="main" format="%Date(2006 Jan 02/3:04:05.000000000 PM MST) [%Level] %Msg%n"/>
-        <format id="format1" format="%Date %Time %RelFile %Func %Line [%LEV] %Msg%n" />
+        <format id="format1" format="%Date %Time %Func %Line [%LEV] %Msg%n" />
         <format id="format2" format="%Date %Time [%LEV] %Msg%n" />
     </formats>
 </seelog>

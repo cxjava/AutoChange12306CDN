@@ -73,6 +73,12 @@ func main() {
 				log.Error(Config.CDN[i], " OnRequest error:", err)
 				return r, nil
 			}
+			// go func(resp *http.Response) {
+			// 	time.Sleep(5 * time.Second)
+			// 	log.Info("Response closed!")
+			// 	resp.Body.Close()
+			// }(resp)
+
 			log.Info(Config.CDN[i], "success!")
 			return r, resp
 		})
@@ -138,7 +144,11 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 		log.Error("doForWardRequest DialTimeout error:", err)
 		return nil, err
 	}
-	// defer conn.Close()
+	go func(conn *tls.Conn) {
+		time.Sleep(5 * time.Second)
+		log.Info("conn closed!")
+		conn.Close()
+	}(conn)
 	// errWrite := req.Write(conn)
 	errWrite := req.WriteProxy(conn)
 	if errWrite != nil {
