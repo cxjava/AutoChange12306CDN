@@ -13,6 +13,6 @@
 * 如果使用12306订票助手.NET版订票，请设置代理为本软件的监听地址，默认为:127.0.0.1:8080
 
 # 打包好的下载地址
-链接：[http://pan.baidu.com/s/1jG9RZwy](http://pan.baidu.com/s/1jG9RZwy) 密码: q2qa
+链接：[http://pan.baidu.com/s/1qW8tMhA](http://pan.baidu.com/s/1qW8tMhA) 密码: ua1x
 
 #### 最后希望大家都能早日买到火车票票回家团圆
