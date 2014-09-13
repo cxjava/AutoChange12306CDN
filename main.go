@@ -28,7 +28,9 @@ type config struct {
 	FromStations []string `toml:"from_station"`
 	ToStations   []string `toml:"to_station"`
 	Verbose      bool     `toml:"proxy_verbose"`
+	VerifyBody   bool     `toml:"verify_body"`
 	CDN          []string `toml:"cdn"`
+	TimeOut      int      `toml:"time_out"`
 }
 
 var (
@@ -103,29 +105,30 @@ func addUrlMatches(proxy *goproxy.ProxyHttpServer) {
 			// 	log.Info("Response closed!")
 			// 	resp.Body.Close()
 			// }(resp)
+			if Config.VerifyBody {
+				d, err := httputil.DumpResponse(resp, false)
+				if err != nil {
+					log.Error(Config.CDN[i], " OnRequest error:", err)
+					return req, nil
+				}
 
-			d, err := httputil.DumpResponse(resp, false)
-			if err != nil {
-				log.Error(Config.CDN[i], " OnRequest error:", err)
-				return req, nil
+				save := resp.Body
+				savecl := resp.ContentLength
+
+				save, resp.Body, err = drainBody(resp.Body)
+				if err != nil {
+					log.Error(Config.CDN[i], " drainBody error:", err)
+					return req, nil
+				}
+				content := string(ParseResponseBody(resp))
+				if !strings.Contains(content, `"httpstatus":200,"data":[{"queryLeftNewDTO":{"t`) {
+					log.Error("Content is:", content)
+					log.Error("Header is:", string(d))
+				}
+
+				resp.Body = save
+				resp.ContentLength = savecl
 			}
-
-			save := resp.Body
-			savecl := resp.ContentLength
-
-			save, resp.Body, err = drainBody(resp.Body)
-			if err != nil {
-				log.Error(Config.CDN[i], " drainBody error:", err)
-				return req, nil
-			}
-			content := string(ParseResponseBody(resp))
-			if !strings.Contains(content, `"httpstatus":200,"data":[{"queryLeftNewDTO":{"t`) {
-				log.Error("Content is:", content)
-				log.Error("Header is:", string(d))
-			}
-
-			resp.Body = save
-			resp.ContentLength = savecl
 
 			log.Info(Config.CDN[i], " success!")
 			return req, resp
@@ -144,13 +147,25 @@ func NewForwardClientConn(forwardAddress, scheme string) (*httputil.ClientConn, 
 		}
 		return httputil.NewProxyClientConn(conn, nil), nil
 	}
-	conn, err := tls.Dial("tcp", forwardAddress+":443", &tls.Config{
-		InsecureSkipVerify: true,
-	})
+	ipConn, err := net.DialTimeout("tcp", forwardAddress+":443", time.Duration(Config.TimeOut)*time.Millisecond)
 	if err != nil {
-		log.Error(forwardAddress, "newForwardClientConn tls.Dial error:", err)
+		log.Error("NewForwardClientConn DialTimeout error:", err)
 		return nil, err
 	}
+	go func(ipConn net.Conn) {
+		time.Sleep(5 * time.Second)
+		log.Debug("ipConn closed!")
+		ipConn.Close()
+	}(ipConn)
+	conn := tls.Client(ipConn, &tls.Config{
+		InsecureSkipVerify: true,
+	})
+	go func(conn *tls.Conn) {
+		time.Sleep(5 * time.Second)
+		log.Debug("conn closed!")
+		conn.Close()
+	}(conn)
+
 	return httputil.NewProxyClientConn(conn, nil), nil
 }
 
@@ -167,20 +182,27 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 	if !strings.Contains(forwardAddress, ":") {
 		forwardAddress = forwardAddress + ":443"
 	}
-	conn, err := tls.Dial("tcp", forwardAddress, &tls.Config{
-		InsecureSkipVerify: true,
-	})
+	ipConn, err := net.DialTimeout("tcp", forwardAddress, time.Duration(Config.TimeOut)*time.Millisecond)
 	if err != nil {
-		log.Error("doForWardRequest DialTimeout error:", err)
+		log.Error("doForWardRequest2 DialTimeout error:", err)
 		return nil, err
 	}
+	go func(ipConn net.Conn) {
+		time.Sleep(5 * time.Second)
+		log.Debug("ipConn closed!")
+		ipConn.Close()
+	}(ipConn)
+
+	conn := tls.Client(ipConn, &tls.Config{
+		InsecureSkipVerify: true,
+	})
 	go func(conn *tls.Conn) {
 		time.Sleep(5 * time.Second)
-		log.Info("conn closed!")
+		log.Debug("conn closed!")
 		conn.Close()
 	}(conn)
-	// errWrite := req.Write(conn)
-	errWrite := req.WriteProxy(conn)
+	errWrite := req.Write(conn)
+	// errWrite := req.WriteProxy(conn)
 	if errWrite != nil {
 		log.Error("doForWardRequest Write error:", errWrite)
 		return nil, err
