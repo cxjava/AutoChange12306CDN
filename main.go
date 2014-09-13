@@ -30,7 +30,8 @@ type config struct {
 	Verbose      bool     `toml:"proxy_verbose"`
 	VerifyBody   bool     `toml:"verify_body"`
 	CDN          []string `toml:"cdn"`
-	TimeOut      int      `toml:"time_out"`
+	ConnTimeOut  int      `toml:"conn_time_out"`
+	ReadTimeOut  int      `toml:"read_time_out"`
 }
 
 var (
@@ -147,7 +148,7 @@ func NewForwardClientConn(forwardAddress, scheme string) (*httputil.ClientConn, 
 		}
 		return httputil.NewProxyClientConn(conn, nil), nil
 	}
-	ipConn, err := net.DialTimeout("tcp", forwardAddress+":443", time.Duration(Config.TimeOut)*time.Millisecond)
+	ipConn, err := net.DialTimeout("tcp", forwardAddress+":443", time.Duration(Config.ConnTimeOut)*time.Millisecond)
 	if err != nil {
 		log.Error("NewForwardClientConn DialTimeout error:", err)
 		return nil, err
@@ -160,6 +161,7 @@ func NewForwardClientConn(forwardAddress, scheme string) (*httputil.ClientConn, 
 	conn := tls.Client(ipConn, &tls.Config{
 		InsecureSkipVerify: true,
 	})
+	conn.SetReadDeadline(time.Now().Add(time.Duration(Config.ReadTimeOut) * time.Millisecond))
 	go func(conn *tls.Conn) {
 		time.Sleep(5 * time.Second)
 		log.Debug("conn closed!")
@@ -182,7 +184,7 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 	if !strings.Contains(forwardAddress, ":") {
 		forwardAddress = forwardAddress + ":443"
 	}
-	ipConn, err := net.DialTimeout("tcp", forwardAddress, time.Duration(Config.TimeOut)*time.Millisecond)
+	ipConn, err := net.DialTimeout("tcp", forwardAddress, time.Duration(Config.ConnTimeOut)*time.Millisecond)
 	if err != nil {
 		log.Error("doForWardRequest2 DialTimeout error:", err)
 		return nil, err
@@ -196,6 +198,7 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 	conn := tls.Client(ipConn, &tls.Config{
 		InsecureSkipVerify: true,
 	})
+	conn.SetReadDeadline(time.Now().Add(time.Duration(Config.ReadTimeOut) * time.Millisecond))
 	go func(conn *tls.Conn) {
 		time.Sleep(5 * time.Second)
 		log.Debug("conn closed!")
