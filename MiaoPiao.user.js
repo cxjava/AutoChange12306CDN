@@ -78,165 +78,34 @@ function withjQuery(callback, safe) {
 
 withjQuery(function($, window) {
 
-	$(document).click(function() {
-		if (window.webkitNotifications && window.webkitNotifications.checkPermission() != 0) {
-			window.webkitNotifications.requestPermission();
-		}
-	});
-
-	function notify(str, timeout, skipAlert) {
-		if (window.webkitNotifications && window.webkitNotifications.checkPermission() == 0) {
-			var notification = webkitNotifications.createNotification(
-				"http://www.12306.cn/mormhweb/images/favicon.ico", // icon url - can be relative
-				'订票', // notification title
-				str
-			);
-			notification.show();
-			if (timeout) {
-				setTimeout(function() {
-					notification.cancel();
-				}, timeout);
-			}
-			return true;
-		} else {
-			if (!skipAlert) {
-				//alert(str);
-			}
-			return false;
-		}
-	}
-
 	function route(match, fn) {
 		if (window.location.href.indexOf(match) != -1) {
 			fn();
-		};
+		}
 	}
 
 	var clickevent = document.createEvent('MouseEvents');
 	clickevent.initEvent('click', false, true);
 
-	// --- 设置cookie
-	var setCookie = function(sName, sValue, expireHours) {
-		var cookieString = sName + "=" + escape(sValue);
-		//;判断是否设置过期时间
-		if (expireHours > 0) {
-			var date = new Date();
-			date.setTime(date.getTime() + expireHours * 3600 * 1000);
-			cookieString = cookieString + "; expires=" + date.toGMTString();
+	function query() {
 
+		setTimeout(function() {
+			window.autoSearchTime = 1000;
+		}, 2000);
 
-		}
-		document.cookie = cookieString + "; path=/";
-
-	}
-
-	//--- 获取cookie
-	var getCookie = function(sName) {
-		var aCookie = document.cookie.split("; ");
-		for (var j = 0; j < aCookie.length; j++) {
-			var aCrumb = aCookie[j].split("=");
-			if (escape(sName) == aCrumb[0]) {
-				if (aCrumb[1])
-					return unescape(aCrumb[1]);
-			}
-		}
-		return "";
-	}
-
-		function refreshStation() {
-			var stationobj = {};
-			var stationnames = window.station_names.split("@");
-			for (var i in stationnames) {
-				var stationname = stationnames[i];
-				if (stationname == "")
-					continue;
-
-				try {
-					var stationfields = stationname.split("|");
-					stationobj[stationfields[1]] = stationfields[2];
-				} catch (e) {
-
-				}
-			}
-
-			var stationGroups = {
-				"北京": ["北京北", "北京东", "北京南", "北京", "北京西"],
-				"长沙": ["长沙", "长沙南"],
-				"衡阳": ["衡阳", "衡阳东"],
-				"深圳": ["深圳", "深圳北","深圳西"],
-				"岳阳": ["岳阳", "岳阳东"],
-				"重庆": ["重庆", "重庆北"],
-				"武汉": ["武汉", "武昌", "汉口"],
-				"武昌": ["武汉", "武昌", "汉口"],
-				"汉口": ["武汉", "武昌", "汉口"],
-				"桂林": ["桂林", "桂林北"],
-				"广州": ["广州", "广州东", "广州南"]
-			};
-
-			var queryTimes = 1;
-
-			var resetStation = function(station) {
-
-				for (var i in stationGroups) {
-					var stations = stationGroups[i];
-					if ($(station + "Text").val().indexOf(i) == 0) {
-						var stationText = stations[Math.round(Math.random() * (stations.length - 1))];
-						$(station + "Text").val(stationText);
-						$(station).val(stationobj[stationText]);
-						break;
-					}
-				}
-			}
-
-			setInterval(function() {
-				if ($("#query_ticket").text() == "停止查询") {
-					resetStation("#fromStation");
-					resetStation("#toStation");
-					queryTimes++;
-				}
-			}, 2000);
-		}
-
-
-		function query() {
-			refreshStation();
-
-			setTimeout(function() {
-				window.autoSearchTime = 2000;
-			}, 2000);
-
-			setInterval(function() {
-				if ($("#autosubmitcheckticketinfo").css("display") == "none" && $("#query_ticket").text() == "停止查询") {
+		setInterval(function() {
+			if ($("#autosubmitcheckticketinfo").css("display") == "none" && $("#query_ticket").text() == "停止查询") {
+				//停止
+				document.getElementById("query_ticket").dispatchEvent(clickevent);
+				//继续查询
+				setTimeout(function() {
 					document.getElementById("query_ticket").dispatchEvent(clickevent);
+				}, 500);
+			}
+		}, 4000);
 
-					setTimeout(function() {
-						document.getElementById("query_ticket").dispatchEvent(clickevent);
-					}, 2000);
-				}
-			}, 6000);
-
-			//        setInterval(function () {
-			//            if ($("#autosubmitcheckticketinfo").length > 0 && $("#autosubmitcheckticketinfo").css("display") != "none") {
-
-			//                if ($("#music").length == 0) {
-			//                    $("#autosubmitcheckticketinfo").append("<iframe id='music' src='http://bz.5sing.com/1471807.html' height='0' width='0'>");
-			//                }
-
-			//                if ($("#randCode2").length > 0) {
-			//                    if (!$("#randCode2").val()) {
-			//                        $("#randCode2")[0].focus();
-			//                    }
-			//                }
-
-			//                if ($("#i-ok2").length > 0 && $("#i-ok2").css("display") == "block") {
-			//                    document.getElementById("qr_submit").dispatchEvent(clickevent);
-			//                }
-			//            }
-
-			//        }, 500);
-		}
+	}
 
 	route("init", query);
-
 
 }, true);
