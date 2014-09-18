@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	_ "net/http/pprof"
 	"regexp"
 	"runtime/debug"
 	"strconv"
@@ -55,7 +56,9 @@ func main() {
 		}
 	}()
 	readConfig()
-
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
 	proxy := goproxy.NewProxyHttpServer()
 
 	proxy.Verbose = Config.Verbose
