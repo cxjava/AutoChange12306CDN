@@ -138,6 +138,12 @@ func addUrlMatches(proxy *goproxy.ProxyHttpServer) {
 			return req, resp
 		})
 	}
+
+	proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(".*/otn/leftTicket/log.*"))).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		return req, goproxy.NewResponse(req,
+			goproxy.ContentTypeText, http.StatusForbidden,
+			"Don't log !")
+	})
 }
 
 //	clientConn, _ := newForwardClientConn("www.google.com","https")
