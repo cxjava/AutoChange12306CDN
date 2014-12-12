@@ -2,10 +2,9 @@
 	"ArtifactsDest": ".",
 	"Arch": "386 amd64",
 	"Os": "windows",
-	"Verbosity": "v",
 	"ConfigVersion": "0.9",
 	"Resources": {
-            "Include": "MiaoPiao.user.js,config.ini,README*,servernode.json",
+            "Include": "MiaoPiao.user.js,config.ini,README*,servernode.json,findIP",
             "Exclude": "*.go"
         }
 }

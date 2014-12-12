@@ -8,6 +8,7 @@ _obj
 _test
 log
 snapshot
+findIP
 
 # Architecture specific extensions/prefixes
 *.[568vq]
