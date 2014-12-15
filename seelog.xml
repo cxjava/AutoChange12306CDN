@@ -12,6 +12,6 @@
         <format id="main" format="%Date(2006 Jan 02/3:04:05.000000000 PM MST) [%Level] %Msg%n"/>
         <format id="format1" format="%Date %Time %Func %Line [%LEV] %Msg%n" />
         <format id="format2" format="%Date %Time [%LEV] %Msg%n"/>
-        <format id="format3" format="%Ns %l %Msg%n"/>
+        <format id="format3" format="%Date %Time %l %Msg%n"/>
     </formats>
 </seelog>

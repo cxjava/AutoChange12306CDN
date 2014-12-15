@@ -99,9 +99,9 @@ func addUrlMatches(proxy *goproxy.ProxyHttpServer) {
 
 			log.Debug(req.URL.RawQuery)
 
-			resp, err := DoForWardRequest2(Config.CDN[i], req)
-			if err != nil {
-				log.Error(Config.CDN[i], " OnRequest error:", err)
+			resp, err := DoForWardRequest(Config.CDN[i], req)
+			if err != nil && err != httputil.ErrPersistEOF {
+				log.Error(Config.CDN[i], " OnRequest error : ", err)
 				return req, nil
 			}
 			// go func(resp *http.Response) {
