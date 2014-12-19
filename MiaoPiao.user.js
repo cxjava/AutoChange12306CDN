@@ -94,6 +94,18 @@ withjQuery(function($, window) {
 		}, 2000);
 
 		setInterval(function() {
+			if ($("#content_defaultwarningAlert_id").attr('class') == 'up-box w600') {
+				//关闭查询失败的窗口
+				document.getElementById("qd_closeDefaultWarningWindowDialog_id").dispatchEvent(clickevent);
+
+				document.getElementById("query_ticket").dispatchEvent(clickevent);
+				setTimeout(function() {
+					document.getElementById("query_ticket").dispatchEvent(clickevent);
+				}, 500);
+			}
+		}, 1000);
+
+		setInterval(function() {
 			if ($("#autosubmitcheckticketinfo").css("display") == "none" && $("#query_ticket").text() == "停止查询") {
 				//停止
 				document.getElementById("query_ticket").dispatchEvent(clickevent);
@@ -102,8 +114,7 @@ withjQuery(function($, window) {
 					document.getElementById("query_ticket").dispatchEvent(clickevent);
 				}, 500);
 			}
-		}, 4000);
-
+		}, 5000);
 	}
 
 	route("init", query);
