@@ -18,32 +18,38 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	log "github.com/cihub/seelog"
 	"github.com/elazarl/goproxy"
+	"github.com/koding/multiconfig"
 )
 
-type config struct {
-	ListenAddr   string   `toml:"listen_addr"`
-	UrlMatches   []string `toml:"url_matches"`
-	FromStations []string `toml:"from_station"`
-	ToStations   []string `toml:"to_station"`
-	Verbose      bool     `toml:"proxy_verbose"`
-	VerifyBody   bool     `toml:"verify_body"`
-	CDN          []string `toml:"cdn"`
-	ConnTimeOut  int      `toml:"conn_time_out"`
-	ReadTimeOut  int      `toml:"read_time_out"`
+type myResp struct {
+	Resp *http.Response
+	IP   string
+}
+type Config struct {
+	ListenAddr   string
+	URLMatches   []string
+	FromStation  []string
+	ToStation    []string
+	ProxyVerbose bool `default:"false"`
+	VerifyBody   bool `default:"false"`
+	CDN          []string
+	ConnTimeout  int
+	ReadTimeout  int
 }
 
 var (
-	timeout        = 5 * time.Second //超时时间
-	fromStationStr = ""              //起点站
-	fromStation    []string          //起点站数组
-	toStationStr   = ""              //终点站
-	toStation      []string          //终点站数组
-	index          = make(chan int)  //获取CDN下标的队列
-	add            = make(chan int)  //通知CDN下标加1的队列
-	Config         config            //配置文件
+	cdns           = make(map[string]string)
+	timeout        = 5 * time.Second       //超时时间
+	fromStationStr = ""                    //起点站
+	fromStation    []string                //起点站数组
+	toStationStr   = ""                    //终点站
+	toStation      []string                //终点站数组
+	cdnChan        = make(chan string, 20) //CDN暂存的地方
+	index          = make(chan int)        //获取CDN下标的队列
+	add            = make(chan int)        //通知CDN下标加1的队列
+	config         = new(Config)           //配置文件
 	r              = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
@@ -61,23 +67,20 @@ func main() {
 	}()
 	proxy := goproxy.NewProxyHttpServer()
 
-	proxy.Verbose = Config.Verbose
+	proxy.Verbose = config.ProxyVerbose
 	proxy.OnRequest(goproxy.ReqHostIs("kyfw.12306.cn:443")).HandleConnect(goproxy.AlwaysMitm)
 
 	addUrlMatches(proxy)
 
-	go ChangeCDN()
+	AddCDN()
 
-	log.Info("监听端口:", Config.ListenAddr)
-	http.ListenAndServe(Config.ListenAddr, proxy)
+	log.Info("监听端口:", config.ListenAddr)
+	http.ListenAndServe(config.ListenAddr, proxy)
 }
 
 func addUrlMatches(proxy *goproxy.ProxyHttpServer) {
-	for _, matchUrl := range Config.UrlMatches {
+	for _, matchUrl := range config.URLMatches {
 		proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(matchUrl))).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-			i := <-index
-			add <- 0
-			log.Info("使用第", i, "个", Config.CDN[i])
 			req.Header.Set("If-Modified-Since", time.Now().Local().Format(time.RFC1123Z))
 			req.Header.Set("If-None-Match", strconv.FormatInt(time.Now().UnixNano(), 10))
 			req.Header.Set("Cache-Control", "no-cache")
@@ -97,44 +100,10 @@ func addUrlMatches(proxy *goproxy.ProxyHttpServer) {
 				req.URL.RawQuery = strings.Replace(req.URL.RawQuery, to, toStation[r.Intn(len(toStation))], -1)
 			}
 
-			log.Debug(req.URL.RawQuery)
+			log.Info("request URL:", req.URL.RawQuery)
 
-			resp, err := DoForWardRequest(Config.CDN[i], req)
-			if err != nil && err != httputil.ErrPersistEOF {
-				log.Error(Config.CDN[i], " OnRequest error : ", err)
-				return req, nil
-			}
-			// go func(resp *http.Response) {
-			// 	time.Sleep(5 * time.Second)
-			// 	log.Info("Response closed!")
-			// 	resp.Body.Close()
-			// }(resp)
-			if Config.VerifyBody {
-				d, err := httputil.DumpResponse(resp, false)
-				if err != nil {
-					log.Error(Config.CDN[i], " OnRequest error:", err)
-					return req, nil
-				}
+			resp := GetResponse(req).Resp
 
-				save := resp.Body
-				savecl := resp.ContentLength
-
-				save, resp.Body, err = drainBody(resp.Body)
-				if err != nil {
-					log.Error(Config.CDN[i], " drainBody error:", err)
-					return req, nil
-				}
-				content := string(ParseResponseBody(resp))
-				if !strings.Contains(content, `"httpstatus":200,"data":[{"queryLeftNewDTO":{"t`) {
-					log.Error("Content is:", content)
-					log.Error("Header is:", string(d))
-				}
-
-				resp.Body = save
-				resp.ContentLength = savecl
-			}
-
-			log.Info(Config.CDN[i], " success!")
 			return req, resp
 		})
 	}
@@ -157,7 +126,7 @@ func NewForwardClientConn(forwardAddress, scheme string) (*httputil.ClientConn, 
 		}
 		return httputil.NewProxyClientConn(conn, nil), nil
 	}
-	ipConn, err := net.DialTimeout("tcp", forwardAddress+":443", time.Duration(Config.ConnTimeOut)*time.Millisecond)
+	ipConn, err := net.DialTimeout("tcp", forwardAddress+":443", time.Duration(config.ConnTimeout)*time.Millisecond)
 	if err != nil {
 		log.Error("NewForwardClientConn DialTimeout error:", err)
 		return nil, err
@@ -170,7 +139,7 @@ func NewForwardClientConn(forwardAddress, scheme string) (*httputil.ClientConn, 
 	conn := tls.Client(ipConn, &tls.Config{
 		InsecureSkipVerify: true,
 	})
-	conn.SetReadDeadline(time.Now().Add(time.Duration(Config.ReadTimeOut) * time.Millisecond))
+	conn.SetReadDeadline(time.Now().Add(time.Duration(config.ReadTimeout) * time.Millisecond))
 	go func(conn *tls.Conn) {
 		time.Sleep(5 * time.Second)
 		log.Debug("conn closed!")
@@ -193,7 +162,7 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 	if !strings.Contains(forwardAddress, ":") {
 		forwardAddress = forwardAddress + ":443"
 	}
-	ipConn, err := net.DialTimeout("tcp", forwardAddress, time.Duration(Config.ConnTimeOut)*time.Millisecond)
+	ipConn, err := net.DialTimeout("tcp", forwardAddress, time.Duration(config.ConnTimeout)*time.Millisecond)
 	if err != nil {
 		log.Error("doForWardRequest2 DialTimeout error:", err)
 		return nil, err
@@ -207,7 +176,7 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 	conn := tls.Client(ipConn, &tls.Config{
 		InsecureSkipVerify: true,
 	})
-	conn.SetReadDeadline(time.Now().Add(time.Duration(Config.ReadTimeOut) * time.Millisecond))
+	conn.SetReadDeadline(time.Now().Add(time.Duration(config.ReadTimeout) * time.Millisecond))
 	go func(conn *tls.Conn) {
 		time.Sleep(5 * time.Second)
 		log.Debug("conn closed!")
@@ -224,29 +193,28 @@ func DoForWardRequest2(forwardAddress string, req *http.Request) (*http.Response
 
 //读取配置文件
 func readConfig() {
-	if _, err := toml.DecodeFile("config.ini", &Config); err != nil {
-		log.Error(err)
-		return
-	}
+	m := multiconfig.NewWithPath("config.toml") // supports TOML and JSON
+	// Populated the serverConf struct
+	m.MustLoad(config) // Check for error
 
-	if len(Config.CDN) < 1 {
+	if len(config.CDN) < 1 {
 		log.Error("淘气了,CDN也不配置～～")
 		return
 	}
 	//解析地址
 	parseStationNames()
 	//解析起点站
-	if len(Config.FromStations) > 0 {
-		fromStation = make([]string, len(Config.FromStations))
-		for k, v := range Config.FromStations {
+	if len(config.FromStation) > 0 {
+		fromStation = make([]string, len(config.FromStation))
+		for k, v := range config.FromStation {
 			fromStationStr = fromStationStr + stationMap[v]
 			fromStation[k] = stationMap[v]
 		}
 	}
 	//终点站
-	if len(Config.ToStations) > 0 {
-		toStation = make([]string, len(Config.ToStations))
-		for k, v := range Config.ToStations {
+	if len(config.ToStation) > 0 {
+		toStation = make([]string, len(config.ToStation))
+		for k, v := range config.ToStation {
 			toStationStr = toStationStr + stationMap[v]
 			toStation[k] = stationMap[v]
 		}
@@ -267,18 +235,66 @@ func drainBody(b io.ReadCloser) (r1, r2 io.ReadCloser, err error) {
 	return ioutil.NopCloser(&buf), ioutil.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
-//切换CDN下标
-func ChangeCDN() {
-	i := 0
-	index <- i
-	for {
-		select {
-		case <-add:
-			i += 1
-			i = i % len(Config.CDN)
-			index <- i
-		}
+func GetResponse(req *http.Request) *myResp {
+	total := 2
+	ch := make(chan *myResp, total)
+	defer func() {
+		go func() {
+			for re := range ch {
+				if re.Resp != nil {
+					log.Info("resp is closed!")
+					re.Resp.Body.Close()
+				} else {
+					delete(cdns, re.IP)
+					log.Info("resp is null!")
+				}
+			}
+		}()
+	}()
+	for i := 0; i < total; i++ {
+		go func(r *http.Request) {
+			c := <-cdnChan
+			log.Info(c, " requested!")
+			resp, err := DoForWardRequest(c, r)
+			if err != nil && err != httputil.ErrPersistEOF {
+				log.Error(c, " OnRequest error : ", err)
+			}
+			log.Info(c, " responsed!")
+			ch <- &myResp{
+				Resp: resp,
+				IP:   c,
+			}
+		}(req)
 	}
+
+	return <-ch
+}
+
+func AddCDN() {
+	cdns = make(map[string]string, 100)
+	for i := 0; i < len(config.CDN); i++ {
+		cdns[config.CDN[i]] = config.CDN[i]
+	}
+
+	go func() {
+		for {
+			for _, v := range cdns {
+				cdnChan <- v
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			if len(cdns) < 20 {
+				log.Info("cdn 不够了啊")
+				for i := 0; i < len(config.CDN); i++ {
+					cdns[config.CDN[i]] = config.CDN[i]
+				}
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
 }
 
 //读取响应
