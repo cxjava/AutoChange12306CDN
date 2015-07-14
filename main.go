@@ -28,15 +28,15 @@ type myResp struct {
 	IP   string
 }
 type Config struct {
-	ListenAddr   string
+	ListenAddr   string `default:":8080"`
 	URLMatches   []string
 	FromStation  []string
 	ToStation    []string
 	ProxyVerbose bool `default:"false"`
 	VerifyBody   bool `default:"false"`
 	CDN          []string
-	ConnTimeout  int
-	ReadTimeout  int
+	ConnTimeout  int `default:"1500"`
+	ReadTimeout  int `default:"1000"`
 }
 
 var (
