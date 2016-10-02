@@ -4,6 +4,8 @@
 
 思路来自[分享12306秒票杀手锏源码](http://www.cnblogs.com/guozili/p/3512490.html)
 
+#推荐使用此方法 [Fiddler设置教程](https://git.oschina.net/charles/AutoChange12306CDN/wikis/fiddler)
+
 # 使用方法
 
 * 查找自己当前环境最快的CDN地址，运行findIP/findIP.exe，相同目录下面会生成12306_ip.txt，IP是Ping速度由快到慢进行排列，只需选取前30个IP写入到config.ini里面的cdn= []
