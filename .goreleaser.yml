@@ -1,0 +1,46 @@
+before:
+  hooks:
+    - go generate ./...
+project_name: AutoChange12306CDN
+builds:
+- env:
+    - CGO_ENABLED=0
+  ldflags:
+    - "-s -w"
+  binary: AutoChange12306CDN
+  goos:
+    - windows
+    - darwin
+    - linux
+  goarch:
+    - 386
+    - amd64
+  hooks:
+    post: ./upx.sh
+archive:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}_v{{ .Arm }}{{ end }}'
+  format: tar.gz
+  format_overrides:
+    - goos: windows
+      format: zip
+  wrap_in_directory: true
+  files:
+  - iprange.conf
+  replacements:
+    amd64: 64-bit
+    386: 32-bit
+    arm: ARM
+    arm64: ARM64
+    darwin: macOS
+    linux: Linux
+    windows: Windows
+    openbsd: OpenBSD
+    netbsd: NetBSD
+    freebsd: FreeBSD
+release:
+  github:
+    owner: cxjava
+    name: AutoChange12306CDN
+  draft: true
+  prerelease: true
+  name_template: "{{.ProjectName}}-v{{.Version}}-{{.ShortCommit}}"
