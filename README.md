@@ -4,7 +4,7 @@
 
 思路来自[分享12306秒票杀手锏源码](http://www.cnblogs.com/guozili/p/3512490.html)
 
-# 推荐使用此方法 [Fiddler设置教程](https://git.oschina.net/charles/AutoChange12306CDN/wikis/fiddler)
+# 推荐使用此方法 [Fiddler设置教程](https://github.com/cxjava/AutoChange12306CDN/wiki/Fiddler%E8%AE%BE%E7%BD%AE%E6%95%99%E7%A8%8B)
 
 # 使用方法
 
@@ -23,6 +23,6 @@
 点击 高级 ，再次点击 "继续kyfw.12306.cn（不安全）" 
 
 # 打包好的下载地址
-链接：[http://pan.baidu.com/s/1qW8tMhA](http://pan.baidu.com/s/1qW8tMhA) 密码: ua1x
+链接：[Fiddler抢票需要的软件](https://github.com/cxjava/AutoChange12306CDN/releases/tag/v1.0.1)
 
 #### 最后希望大家都能早日买到火车票票回家团圆
