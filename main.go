@@ -4,32 +4,27 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
-	"time"
+	"os"
 
 	"github.com/cxjava/gscan"
-	"github.com/elazarl/goproxy"
 )
 
 var (
-	cdnChan         = make(chan string, 10)
-	verbose         = flag.Bool("v", false, "Should every proxy request be logged to stdout")
-	addr            = flag.String("a", ":8888", "The proxy listen address")
-	size            = flag.Int("s", 20, "The fastest number of IP")
-	dialTimeout     = flag.Int("dt", 1, "The timeout(Second) of dial")
-	deadlineTimeout = flag.Int("dlt", 1, "The timeout(Second) of deadline")
+	logger  *log.Logger
+	cdnChan = make(chan string, 10)
+	addr    = flag.String("a", ":8888", "The proxy listen address")
+	size    = flag.Int("s", 20, "The fastest number of IP")
 )
 
 func init() {
 	go addCDN()
+	logger = log.New(os.Stdout, "[AutoChange12306CDN]", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 }
 
 func addCDN() {
 	fastestCDN := make(map[string]string, *size)
 
 	ips := gscan.ScanIP("./iprange.conf", gscanConf)
-
 	t := 0
 	for _, v := range ips {
 		if t >= *size {
@@ -39,6 +34,8 @@ func addCDN() {
 		fastestCDN[v] = v + ":443"
 		fmt.Println(v)
 	}
+	logger.Println("CDN query is done!")
+	logger.Println("Server is listening at ", *addr)
 
 	go func() {
 		for {
@@ -51,25 +48,10 @@ func addCDN() {
 
 func main() {
 	flag.Parse()
-	proxy := goproxy.NewProxyHttpServer()
-	proxy.ConnectDial = func(network, addr string) (c net.Conn, err error) {
-		if addr == "kyfw.12306.cn:443" {
-			c, err = net.DialTimeout(network, <-cdnChan, time.Duration(*dialTimeout)*time.Second)
-			if c, ok := c.(*net.TCPConn); err == nil && ok {
-				c.SetKeepAlive(false)
-				c.SetDeadline(time.Now().Add(time.Duration(*deadlineTimeout) * time.Second))
-			}
-			return
-		}
-		c, err = net.Dial(network, addr)
-		if c, ok := c.(*net.TCPConn); err == nil && ok {
-			c.SetKeepAlive(true)
-		}
-		return
-	}
-	proxy.Verbose = *verbose
-	log.Println("start listen on " + *addr)
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+
+	ch := make(chan bool)
+	Gomitmproxy(*addr, ch)
+	<-ch
 }
 
 var gscanConf = `
