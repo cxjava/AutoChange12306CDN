@@ -14,6 +14,14 @@ import (
 	"time"
 )
 
+var (
+	errorResp = "HTTP/1.0 200 OK\r\n" +
+		"Connection: close\r\n" +
+		"Content-Type: application/json;charset=UTF-8\r\n" +
+		"\r\n" +
+		`{"data":{"flag":"1","map":{"CUW":"重庆北","HKN":"汉口","WCN":"武昌"},"result":["|预订|2400000Z490F|Z49|BXP|CDW|HKN|CUW|22:20|05:32|07:12|N|g%2Bd3SnPhBrp6gzy5Eq4zATL6rGgQn4nznpuJl5niuOcsnDutccVaBIqfJp4%3D|20190101|3|P4|05|08|0|0||||无|||无||无|无|||||10401030|1413|0|0"]},"httpstatus":200,"messages":"","status":true}`
+)
+
 const (
 	Version   = "1.1"
 	ONE_DAY   = 24 * time.Hour
@@ -59,15 +67,6 @@ func (handler *HandlerWrapper) ServeHTTP(resp http.ResponseWriter, req *http.Req
 	}
 }
 
-type myDialer struct {
-	d           *net.Dialer
-	ConnectDial func(network string, addr string) (net.Conn, error)
-}
-
-func (d *myDialer) Dial(network, address string) (net.Conn, error) {
-	return d.ConnectDial(network, address)
-}
-
 // DumpHTTPAndHTTPS function to dump the HTTP request header and body
 func (handler *HandlerWrapper) DumpHTTPAndHTTPS(resp http.ResponseWriter, req *http.Request) {
 	req.Header.Del("Proxy-Connection")
@@ -105,23 +104,35 @@ func (handler *HandlerWrapper) DumpHTTPAndHTTPS(resp http.ResponseWriter, req *h
 		if !matched {
 			host += ":443"
 		}
-		if host == "kyfw.12306.cn:443" && strings.HasPrefix(req.RequestURI, "/otn/leftTicket/query") {
-			host = <-cdnChan
-			logger.Println("current CDN is:", host)
+		if host == "kyfw.12306.cn:443" {
+			host = fastest
+			if strings.HasPrefix(req.RequestURI, *queryURL) {
+				host = <-cdnChan
+				logger.Println("current CDN is:", host)
+				connOut, err = tls.DialWithDialer(&net.Dialer{
+					Timeout:   1 * time.Second,
+					KeepAlive: 0,
+				}, "tcp", host, handler.tlsConfig.ServerTLSConfig)
+				if err != nil {
+					logger.Println("Dial to", host, "error:", err)
+					connHj.Write([]byte(errorResp))
+					return
+				}
+			} else {
+				connOut, err = tls.Dial("tcp", host, handler.tlsConfig.ServerTLSConfig)
+				if err != nil {
+					logger.Println("Dial to", host, "error:", err)
+					return
+				}
+			}
+		} else {
+			connOut, err = tls.Dial("tcp", host, handler.tlsConfig.ServerTLSConfig)
+			if err != nil {
+				logger.Println("Dial to", host, "error:", err)
+				return
+			}
 		}
 
-		connOut, err = tls.DialWithDialer(&net.Dialer{
-			Timeout:   1 * time.Second,
-			KeepAlive: 0,
-		}, "tcp", host, handler.tlsConfig.ServerTLSConfig)
-		if err != nil {
-			logger.Println("Dial to", host, "error:", err)
-			connHj.Write([]byte("HTTP/1.0 200 OK\r\n" +
-				"Connection: close\r\n" +
-				"\r\n" +
-				"Body here\n"))
-			return
-		}
 	}
 
 	// Write writes an HTTP/1.1 request, which is the header and body, in wire format. This method consults the following fields of the request:
@@ -136,22 +147,26 @@ func (handler *HandlerWrapper) DumpHTTPAndHTTPS(resp http.ResponseWriter, req *h
 	*/
 	if err = req.Write(connOut); err != nil {
 		logger.Println("send to server error", err)
+		connHj.Write([]byte(errorResp))
 		return
 	}
 
 	respFromRemote, err := http.ReadResponse(bufio.NewReader(connOut), req)
 	if err != nil && err != io.EOF {
 		logger.Println("Fail to read response from remote server.", err)
+		connHj.Write([]byte(errorResp))
 	}
 
 	respDump, err := httputil.DumpResponse(respFromRemote, true)
 	if err != nil {
 		logger.Println("Fail to dump the response.", err)
+		connHj.Write([]byte(errorResp))
 	}
 	// Send remote response back to client
 	_, err = connHj.Write(respDump)
 	if err != nil {
 		logger.Println("Fail to send response back to client.", err)
+		connHj.Write([]byte(errorResp))
 	}
 
 	<-ch

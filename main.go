@@ -10,10 +10,12 @@ import (
 )
 
 var (
-	logger  *log.Logger
-	cdnChan = make(chan string, 10)
-	addr    = flag.String("a", ":8888", "The proxy listen address")
-	size    = flag.Int("s", 20, "The fastest number of IP")
+	logger   *log.Logger
+	cdnChan  = make(chan string, 10)
+	fastest  = ""
+	addr     = flag.String("a", ":8888", "The proxy listen address")
+	queryURL = flag.String("q", "/otn/leftTicket/query", "The prefix of 12306 query URL")
+	size     = flag.Int("s", 20, "The fastest number of IP")
 )
 
 func init() {
@@ -25,6 +27,7 @@ func addCDN() {
 	fastestCDN := make(map[string]string, *size)
 
 	ips := gscan.ScanIP("./iprange.conf", gscanConf)
+	fastest = ips[0] + ":443"
 	t := 0
 	for _, v := range ips {
 		if t >= *size {
@@ -34,7 +37,7 @@ func addCDN() {
 		fastestCDN[v] = v + ":443"
 		fmt.Println(v)
 	}
-	logger.Println("CDN query is done!")
+	logger.Println("CDN query is done! fastest one is:" + fastest)
 	logger.Println("Server is listening at ", *addr)
 
 	go func() {
