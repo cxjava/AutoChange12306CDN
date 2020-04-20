@@ -1,0 +1,35 @@
+on:
+  push:
+    tags:
+      - "v*"
+  watch:
+    types: started
+
+name: CI
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: github.event.repository.owner.id == github.event.sender.id
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Check git tag exist
+        run: |
+          git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+          gitTagExists=$(git tag --points-at HEAD)
+          if ! [ -n "$gitTagExists" ]; then
+              echo "no tag, create one."
+              latesttag=$(git describe --tags `git rev-list --tags --max-count=1`)
+              echo "latest tag: ${latesttag}"
+              newtag=$(echo ${latesttag} | awk -F. -v OFS=. 'NF==1{print ++$NF}; NF>1{if(length($NF+1)>length($NF))$(NF-1)++; $NF=sprintf("%0*d", length($NF), ($NF+1)%(10^length($NF))); print}')
+              echo "new tag: ${newtag}"
+              git tag $newtag
+          fi
+      - name: goreleaser
+        uses: docker://goreleaser/goreleaser:latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: release --skip-validate --skip-sign --debug --config .github/goreleaser.yml
+        if: success()
