@@ -1,0 +1,4 @@
+github.com/cxjava/gscan v0.1.0 h1:FLACicjeMKekFMNZaCrK2SNDnK/iMPcXLD4e3raEQZg=
+github.com/cxjava/gscan v0.1.0/go.mod h1:b5ydjxl4slPxexzkdP8prpPfUdgZ5/EBDTPxEWthCdk=
+github.com/mikioh/ipaddr v0.0.0-20190404000644-d465c8ab6721 h1:RlZweED6sbSArvlE924+mUcZuXKLBHA35U7LN621Bws=
+github.com/mikioh/ipaddr v0.0.0-20190404000644-d465c8ab6721/go.mod h1:Ickgr2WtCLZ2MDGd4Gr0geeCH5HybhRJbonOgQpvSxc=
