@@ -1,19 +1,38 @@
+name: Release
+
 on:
   push:
     tags:
       - "v*"
-  watch:
-    types: started
+  workflow_dispatch:
+    inputs:
+      upx_version:
+        description: 'UPX version'
+        required: true
+        default: '3.96'
 
-name: CI
 jobs:
   release:
-    name: Release
-    runs-on: ubuntu-latest
-    if: github.event.repository.owner.id == github.event.sender.id
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        go: ["1.17.x"]
+        os: [ubuntu-latest]
+    name: Go ${{ matrix.go }} in ${{ matrix.os }}
     steps:
-      - name: Check out code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Environment
+        run: |
+          go version
+          go env
+      # So GoReleaser can generate the changelog properly
+      - name: Unshallowify the repo clone
+        run: git fetch --prune --unshallow
+        
       - name: Check git tag exist
         run: |
           git fetch --depth=1 origin +refs/tags/*:refs/tags/*
@@ -26,10 +45,20 @@ jobs:
               echo "new tag: ${newtag}"
               git tag $newtag
           fi
-      - name: goreleaser
-        uses: docker://goreleaser/goreleaser:latest
+      
+      - name: Installing upx
+        env:
+          UPX_VERSION: ${{ github.event.inputs.upx_version }}
+        run: |
+          echo "Installing upx .."
+          curl -OL "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz"
+          tar xvf "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+          cp "upx-${UPX_VERSION}-amd64_linux/upx" "$(go env GOPATH)/bin"
+          upx --version
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        with:
+          version: latest
+          args: release --rm-dist --skip-validate --skip-sign --debug
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: release --skip-validate --skip-sign --debug --config .github/goreleaser.yml
-        if: success()
